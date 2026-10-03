@@ -89,17 +89,26 @@ dt_status dt_int_mul(long long a, long long b, long long *out)
         return DT_OK;
     }
 
-    if (a == LLONG_MIN && b == -1) {
-        return DT_ERR_OVERFLOW;
+    if (b == -1) { /* Negative b*/
+        if (a == LLONG_MIN) {
+            return DT_ERR_OVERFLOW;
+        }
+
+        *out = -a;
+        return DT_OK;
     }
 
-    if (b > 0 && (a > LLONG_MAX / b || a < LLONG_MIN / b)) {
-        return DT_ERR_OVERFLOW;
-    } else {
+    if (b > 0) { /* Positive b*/
+        if (a > LLONG_MAX / b || a < LLONG_MIN / b) {
+            return DT_ERR_OVERFLOW;
+        }
+    }else {
         if (a > LLONG_MIN / b || a < LLONG_MAX / b) {
             return DT_ERR_OVERFLOW;
         }
     }
+
+
     
 
     *out = a * b;
