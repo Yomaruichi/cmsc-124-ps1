@@ -26,6 +26,28 @@ struct dt_array {
     long long lower_bound;
 };
 
+// helper function for get and set
+static dt_status dt_array_index_to_offset(const dt_array *a, long long index, size_t *out_offset)
+{
+    if (a == NULL || out_offset == NULL || a->length == 0) {
+        return DT_ERR_RANGE;
+    }
+
+    // index out of bounds
+    if (index < a->lower_bound) {
+        return DT_ERR_RANGE;
+    }
+
+    // compute highest valid index without overflow
+    long long max_index = a->lower_bound + (long long)(a->length - 1);
+    if (index > max_index) {
+        return DT_ERR_RANGE;
+    }
+
+    *out_offset = (size_t)(index - a->lower_bound);
+    return DT_OK;
+}
+
 /*
  * dt_array_new builds an array of length nil elements.
  * The first index is lower_bound. A zero length creates a valid empty array.
@@ -43,9 +65,43 @@ dt_array *dt_array_new(size_t length, long long lower_bound)
        dt_array_new(0, 0)   -> an empty array
        cases/normal/array_basics.case, cases/boundary/array_empty.case,
        cases/boundary/array_negative_lower_bound.case */
-    (void)length;
-    (void)lower_bound;
-    return NULL;
+    // overflow guard for length * sizeof(dt_value)
+    if (length > SIZE_MAX / sizeof(dt_value)) {
+        return NULL;
+    }
+
+    // index overflow guard highest valid index doesnt exceed LLONG_MAX
+    if (length > 0 && lower_bound > LLONG_MAX - (long long)(length - 1)) {
+        return NULL;
+    }
+
+    // allocate dynamic memory to dt_array a
+    dt_array *a = malloc(sizeof(struct dt_array));
+    if (a == NULL) {
+        return NULL;
+    }
+
+    // stores data 
+    a->length = length;
+    a->lower_bound = lower_bound;
+    a->elements = NULL;
+
+    // if length == 0, leave elements null, if greater allocate memory
+    if (length > 0) {
+        a->elements = malloc(length * sizeof(dt_value));
+        // leak cleanup, free a if malloc fails
+        if (a->elements == NULL) {
+            free(a);
+            return NULL;
+        }
+
+        // default every values of element to NIL
+        for (size_t i = 0; i < length; i++) {
+            a->elements[i] = dt_value_nil();
+        }
+    }
+
+    return a;
 }
 
 /*
@@ -58,7 +114,12 @@ void dt_array_free(dt_array *a)
        Preserve the referenced values. The driver environment owns them.
        an array holding a string  -> the element block goes, the string stays
        dt_array_free(NULL)        -> returns, having done nothing */
-    (void)a;
+    if (a == NULL) {
+        return;
+    }
+
+    free(a->elements);
+    free(a);
 }
 
 /*
@@ -71,8 +132,10 @@ size_t dt_array_len(const dt_array *a)
        after `arr new a 3 -1`:  dt_array_len(a) -> 3, the same three elements
        after `arr new a 0 0`:   dt_array_len(a) -> 0
        cases/normal/array_basics.case, cases/boundary/array_empty.case */
-    (void)a;
-    return 0;
+    if (a == NULL) {
+        return 0;
+    }
+    return a->length;
 }
 
 /*
@@ -87,8 +150,11 @@ long long dt_array_lower_bound(const dt_array *a)
        after `arr new a 3 1`:   dt_array_lower_bound(a) -> 1
        cases/boundary/array_negative_lower_bound.case,
        cases/boundary/array_lower_bound_one.case */
-    (void)a;
-    return 0;
+    if (a == NULL) {
+        return 0;
+    }
+    
+    return a->lower_bound;
 }
 
 /*
@@ -109,10 +175,18 @@ dt_status dt_array_get(const dt_array *a, long long index, dt_value *out)
        cases/boundary/array_index_above_upper.case,
        cases/boundary/array_index_below_lower.case,
        cases/boundary/array_full_range_index.case */
-    (void)a;
-    (void)index;
-    (void)out;
-    return DT_ERR_RANGE;
+    if (out == NULL) {
+        return DT_ERR_RANGE;
+    }
+
+    size_t offset;
+    dt_status status = dt_array_index_to_offset(a, index, &offset);
+    if (status != DT_OK) {
+        return status;
+    }
+
+    *out = a->elements[offset];
+    return DT_OK;
 }
 
 /*
@@ -128,8 +202,12 @@ dt_status dt_array_set(dt_array *a, long long index, dt_value v)
          dt_array_set(a, -1, dt_value_int(10))  -> DT_OK, offset 0 holds 10
          dt_array_set(a,  2, dt_value_int(10))  -> DT_ERR_RANGE, nothing changes
        cases/normal/array_basics.case, cases/boundary/array_negative_lower_bound.case */
-    (void)a;
-    (void)index;
-    (void)v;
-    return DT_ERR_RANGE;
+    size_t offset;
+    dt_status status = dt_array_index_to_offset(a, index, &offset);
+    if (status != DT_OK) {
+        return status;
+    }
+
+    a->elements[offset] = v;
+    return DT_OK;
 }
