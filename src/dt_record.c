@@ -71,16 +71,18 @@ dt_record *dt_record_new(const char **field_names, size_t field_count)
 
     // initialize names for each index using strdup
     for (size_t i = 0; i < field_count; i++) {
-        r->names[i] = strdup(field_names[i]);
+        r->names[i] = malloc(strlen(field_names[i]) + 1);
+
         if (r->names[i] == NULL) {
-            // new loop to free each index from start if fail
             for (size_t j = 0; j < i; j++) {
                 free(r->names[j]);
             }
+
             free(r);
             return NULL;
         }
 
+        strcpy(r->names[i], field_names[i]);
         r->values[i] = dt_value_nil();
     }
 
@@ -139,7 +141,7 @@ dt_status dt_record_field_name(const dt_record *r, size_t index, const char **ou
          dt_record_field_name(person, 0, &out)  -> DT_OK, *out = "name"
          dt_record_field_name(person, 2, &out)  -> DT_ERR_RANGE, *out untouched
        cases/normal/record_basics.case */
-    if (index >= r->count || out == NULL || r == NULL) {
+    if (r == NULL || index >= r->count || out == NULL ) {
         return DT_ERR_RANGE;
     }
 
