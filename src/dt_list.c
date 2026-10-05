@@ -54,9 +54,17 @@ dt_list *dt_list_cons(dt_value head, dt_list *tail)
        List b contains (2 3) and references the same cells for 2 and 3.
        an allocation failure -> NULL
        cases/normal/list_basics.case, cases/cleanup/shared_list_tail.case */
-    (void)head;
-    (void)tail;
-    return NULL;
+    // allocate dynamic memory
+    dt_list *l = malloc(sizeof(struct dt_list));
+    if (l == NULL) {
+        return NULL;
+    }
+
+    // initialize head and tail of linked list
+    l->head = head;
+    l->tail = tail;
+
+    return l;
 }
 
 /*
@@ -69,7 +77,12 @@ void dt_list_free(dt_list *l)
        freeing a's first cell  -> b still reaches the cells holding 2 and 3
        releasing the tail here causes the sanitizer to report a double release
        cases/cleanup/shared_list_tail.case */
-    (void)l;
+    if (l == NULL) {
+        return;
+    }
+
+    free(l);
+    return;
 }
 
 /*
@@ -81,8 +94,20 @@ size_t dt_list_len(const dt_list *l)
        for a = (1 2 3):  dt_list_len(a) -> 3
        for the empty list: dt_list_len(NULL) -> 0
        cases/normal/list_basics.case */
-    (void)l;
-    return 0;
+    size_t count = 0;
+    // given input is a const, needed for type correctness
+    // prevents values from being overwritten somehow (read-only guarantee)
+    // keeps l pointed to head
+    // represents the .head and .tail of the next node
+    const dt_list *curr = l;
+
+    // traverses the linked list
+    while (curr != NULL) {
+        count++;
+        curr = curr->tail;
+    }
+
+    return count;
 }
 
 /*
@@ -97,9 +122,13 @@ dt_status dt_list_car(const dt_list *l, dt_value *out)
        for a = (1 2 3):     dt_list_car(a, &out)    -> DT_OK, *out is 1
        for the empty list:  dt_list_car(NULL, &out) -> DT_ERR_EMPTY, *out untouched
        cases/normal/list_basics.case, cases/boundary/list_car_empty.case */
-    (void)l;
-    (void)out;
-    return DT_ERR_EMPTY;
+    if (l == NULL || out == NULL) {
+        return DT_ERR_EMPTY;
+    }
+
+    // returns with value of head on out
+    *out = l->head;
+    return DT_OK;
 }
 
 /*
@@ -113,7 +142,11 @@ dt_status dt_list_cdr(const dt_list *l, dt_list **out)
        for a = (1 2 3):     dt_list_cdr(a, &out)    -> DT_OK, *out references tail b
        for the empty list:  dt_list_cdr(NULL, &out) -> DT_ERR_EMPTY, *out untouched
        cases/normal/list_basics.case, cases/boundary/list_cdr_empty.case */
-    (void)l;
-    (void)out;
-    return DT_ERR_EMPTY;
+    if (l == NULL || out == NULL) {
+        return DT_ERR_EMPTY;
+    }
+
+    // return with value of tail on out
+    *out = l->tail;
+    return DT_OK;
 }
