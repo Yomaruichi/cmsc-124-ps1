@@ -40,8 +40,23 @@ dt_ref *dt_ref_new(dt_value v)
        dt_ref_new(dt_value_int(42))  -> a reference that prints as ref(42)
        an allocation failure          -> NULL
        cases/ownership/ref_released.case */
-    (void)v;
-    return NULL;
+    dt_ref *p = malloc(sizeof(*p));
+
+    if (p == NULL) {
+        return NULL;
+    }
+
+    p->cell = malloc(sizeof(*p->cell));
+
+    if (p->cell == NULL) {
+        free(p);
+        return NULL;
+    }
+
+    *p->cell = v;
+    p->released = false;
+
+    return p;
 }
 
 /*
@@ -59,9 +74,18 @@ dt_status dt_ref_borrow(const dt_ref *p, dt_value *out)
                                                           *out untouched
        cases/ownership/ref_released.case,
        cases/post-release/borrow_after_release.case */
-    (void)p;
-    (void)out;
-    return DT_ERR_RELEASED;
+    if (p == NULL || out == NULL) {
+        return DT_ERR_RELEASED;
+    }
+
+    /* Check released before touching cell. */
+    if (p->released) {
+        return DT_ERR_RELEASED;
+    }
+
+    *out = *p->cell;
+
+    return DT_OK;
 }
 
 /*
@@ -79,8 +103,15 @@ dt_status dt_ref_release(dt_ref *p)
        a reference holding a string     -> releases the cell and preserves the string
        cases/ownership/ref_double_release.case,
        cases/ownership/ref_aliases_string.case */
-    (void)p;
-    return DT_ERR_RELEASED;
+    if (p == NULL || p->released) {
+        return DT_ERR_RELEASED;
+    }
+
+    free(p->cell);
+    p->cell = NULL;
+    p->released = true;
+
+    return DT_OK;
 }
 
 /*
@@ -95,8 +126,11 @@ bool dt_ref_is_released(const dt_ref *p)
        a live reference        -> false, so the driver reports DT_ERR_LEAK
        after dt_ref_release(p) -> true, so the driver reports no leak
        cases/ownership/ref_never_released.case, cases/ownership/ref_released.case */
-    (void)p;
-    return true;
+    if (p == NULL) {
+        return true;
+    }
+
+    return p->released;
 }
 
 /*
@@ -111,5 +145,15 @@ void dt_ref_destroy(dt_ref *p)
        a released reference  -> only the handle is left to free
        a live reference      -> the cell and the handle both go, quietly
        dt_ref_destroy(NULL)  -> returns, having done nothing */
-    (void)p;
+    if (p == NULL) {
+        return;
+    }
+
+    if (!p->released) {
+        free(p->cell);
+        p->cell = NULL;
+        p->released = true;
+    }
+
+    free(p);
 }
