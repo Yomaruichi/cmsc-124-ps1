@@ -22,6 +22,23 @@ struct dt_record {
     size_t   count;
 };
 
+// helper function
+static int dt_record_find_index(const dt_record *r, const char *field)
+{
+    if (r == NULL || field == NULL) {
+        return -1;
+    }
+
+    // loops through each index of record, compare name using strcmp, return index if found
+    for (size_t i = 0; i < r->count; i++) {
+        if (strcmp(r->names[i], field) == 0) {
+            return (int)i;
+        }
+    }
+    // return -1 if fail
+    return -1;
+}
+
 /*
  * dt_record_new builds a record with the specified fields in declaration order.
  * It sets each field to nil and copies each field name.
@@ -36,9 +53,38 @@ dt_record *dt_record_new(const char **field_names, size_t field_count)
        nine fields                  -> NULL, and the driver reports DT_ERR_CAPACITY
        cases/normal/record_basics.case, cases/capacity/record_max_fields.case,
        cases/capacity/record_over_fields.case */
-    (void)field_names;
-    (void)field_count;
-    return NULL;
+    if (field_count > DT_RECORD_MAX_FIELDS) {
+        return NULL;
+    }
+
+    if (field_count > 0 && field_names == NULL) {
+        return NULL;
+    }
+
+    // allocate dynamic memory to r
+    dt_record *r = malloc(sizeof(dt_record));
+    if (r == NULL) {
+        return NULL;
+    }
+
+    r->count = field_count;
+
+    // initialize names for each index using strdup
+    for (size_t i = 0; i < field_count; i++) {
+        r->names[i] = strdup(field_names[i]);
+        if (r->names[i] == NULL) {
+            // new loop to free each index from start if fail
+            for (size_t j = 0; j < i; j++) {
+                free(r->names[j]);
+            }
+            free(r);
+            return NULL;
+        }
+
+        r->values[i] = dt_value_nil();
+    }
+
+    return r;
 }
 
 /*
@@ -50,7 +96,18 @@ void dt_record_free(dt_record *r)
     /* TODO: Release the copied field names. Then release the record.
        a record holding a string value  -> the names go, the string stays
        dt_record_free(NULL)             -> returns, having done nothing */
-    (void)r;
+    // return nothing if NULL
+    if (r == NULL) {
+        return;
+    }
+
+    // loop through names to free each index
+    for (size_t i = 0; i < r->count; i++) {
+        free(r->names[i]);
+    }
+    // free record
+    free(r);
+    return;
 }
 
 /*
@@ -62,8 +119,11 @@ size_t dt_record_field_count(const dt_record *r)
        The count does not change after construction.
        after `rec new person name age`:  dt_record_field_count(person) -> 2
        cases/normal/record_basics.case */
-    (void)r;
-    return 0;
+    if (r == NULL) {
+        return 0;
+    }
+
+    return r->count;
 }
 
 /*
@@ -79,10 +139,13 @@ dt_status dt_record_field_name(const dt_record *r, size_t index, const char **ou
          dt_record_field_name(person, 0, &out)  -> DT_OK, *out = "name"
          dt_record_field_name(person, 2, &out)  -> DT_ERR_RANGE, *out untouched
        cases/normal/record_basics.case */
-    (void)r;
-    (void)index;
-    (void)out;
-    return DT_ERR_RANGE;
+    if (index >= r->count || out == NULL || r == NULL) {
+        return DT_ERR_RANGE;
+    }
+
+    *out = r->names[index];
+
+    return DT_OK;
 }
 
 /*
@@ -96,9 +159,18 @@ dt_status dt_record_get(const dt_record *r, const char *field, dt_value *out)
          dt_record_get(person, "age", &out)      -> DT_OK, *out is the integer 36
          dt_record_get(person, "salary", &out)   -> DT_ERR_FIELD, *out untouched
        cases/normal/record_basics.case, cases/boundary/record_unknown_field.case */
-    (void)r;
-    (void)field;
-    (void)out;
+    if (field == NULL || out == NULL || r == NULL) {
+        return DT_ERR_FIELD;
+    }
+
+    // use helper to find index
+    int index = dt_record_find_index(r, field);
+
+    // if found put values[index] to out
+    if (index != -1) {
+        *out = r->values[index];
+        return DT_OK;
+    }
     return DT_ERR_FIELD;
 }
 
@@ -115,8 +187,18 @@ dt_status dt_record_set(dt_record *r, const char *field, dt_value v)
          dt_record_set(person, "salary", dt_value_int(1))   -> DT_ERR_FIELD
          the record still has only the fields "name" and "age"
        cases/normal/record_basics.case, cases/boundary/record_unknown_field.case */
-    (void)r;
-    (void)field;
-    (void)v;
+    if (r == NULL || field == NULL) {
+        return DT_ERR_FIELD;
+    }
+
+    // use helper to find index
+    int index = dt_record_find_index(r, field);
+
+
+    // if found set values[index] to v
+    if (index != -1) {
+        r->values[index] = v;
+        return DT_OK;
+    }
     return DT_ERR_FIELD;
 }
